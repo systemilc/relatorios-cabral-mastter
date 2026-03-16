@@ -37,6 +37,27 @@
         }
       },
       "required": ["data", "updatedAt"]
+    },
+    "ImportedRecord": {
+      "title": "Registro Importado",
+      "description": "Dados genéricos de uma linha de planilha importada.",
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "description": "Conteúdo bruto da linha da planilha."
+        },
+        "importedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data da importação."
+        },
+        "hash": {
+          "type": "string",
+          "description": "Hash único para evitar duplicidade."
+        }
+      },
+      "required": ["data", "importedAt", "hash"]
     }
   },
   "firestore": {
@@ -47,6 +68,22 @@
     "/receita_cache/{cnpj}": {
       "schema": "ReceitaCache",
       "description": "Cache compartilhado de consultas à Receita Federal."
+    },
+    "/users/{userId}/cabral_sales/{recordId}": {
+      "schema": "ImportedRecord",
+      "description": "Vendas da Cabral importadas pelo usuário."
+    },
+    "/users/{userId}/mastter_sales/{recordId}": {
+      "schema": "ImportedRecord",
+      "description": "Vendas da Mastter importadas pelo usuário."
+    },
+    "/users/{userId}/clients_mastter/{cnpj}": {
+      "schema": "ImportedRecord",
+      "description": "Cadastro de clientes Mastter importado pelo usuário."
+    },
+    "/users/{userId}/roteiro/{cnpj}": {
+      "schema": "ImportedRecord",
+      "description": "Roteiro de vendas importado pelo usuário."
     }
   }
 }

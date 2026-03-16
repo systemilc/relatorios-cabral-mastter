@@ -21,7 +21,9 @@ import {
   Info,
   LogOut,
   LogIn,
-  User as UserIcon
+  User as UserIcon,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
@@ -37,6 +39,10 @@ import {
   setDoc, 
   onSnapshot, 
   collection, 
+  getDocs,
+  query,
+  where,
+  writeBatch,
   googleProvider 
 } from './firebase';
 import { 
@@ -54,6 +60,14 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+async function generateHash(obj: any) {
+  const str = JSON.stringify(obj);
+  const msgUint8 = new TextEncoder().encode(str);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 // --- Components ---
 
 const Button = ({ 
@@ -61,13 +75,15 @@ const Button = ({
   onClick, 
   variant = 'primary', 
   className,
-  disabled 
+  disabled,
+  title
 }: { 
   children: React.ReactNode; 
   onClick?: () => void; 
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
   className?: string;
   disabled?: boolean;
+  title?: string;
 }) => {
   const variants = {
     primary: "bg-black text-white hover:bg-black/90",
@@ -80,6 +96,7 @@ const Button = ({
     <button 
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={cn(
         "px-4 py-2 rounded-xl font-medium transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2",
         variants[variant],
@@ -152,6 +169,13 @@ export default function App() {
   );
 }
 
+const COLLECTION_MAP: Record<SchemaKey, string> = {
+  CABRAL: 'cabral_sales',
+  MASTTER: 'mastter_sales',
+  CLIENTES_MASTTER: 'clients_mastter',
+  ROTEIRO: 'roteiro'
+};
+
 function AppContent() {
   const [user, setUser] = useState<any>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -170,6 +194,7 @@ function AppContent() {
   });
 
   const [step, setStep] = useState<'upload' | 'mapping' | 'dashboard'>('upload');
+  const [showFilters, setShowFilters] = useState(true);
   const [currentMappingKey, setCurrentMappingKey] = useState<SchemaKey | null>(null);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -208,6 +233,41 @@ function AppContent() {
     return () => unsubscribe();
   }, [user]);
 
+  // Load Imported Data from Firestore
+  useEffect(() => {
+    if (!user) {
+      setFiles({
+        CABRAL: null,
+        MASTTER: null,
+        CLIENTES_MASTTER: null,
+        ROTEIRO: null
+      });
+      return;
+    }
+
+    const loadData = async () => {
+      setLoading(true);
+      const newFiles: Record<SchemaKey, any[] | null> = { ...files };
+      
+      for (const key of Object.keys(COLLECTION_MAP) as SchemaKey[]) {
+        try {
+          const q = query(collection(db, 'users', user.uid, COLLECTION_MAP[key]));
+          const snapshot = await getDocs(q);
+          if (!snapshot.empty) {
+            newFiles[key] = snapshot.docs.map(doc => doc.data().data);
+          }
+        } catch (error) {
+          console.error(`Erro ao carregar ${key}:`, error);
+        }
+      }
+      
+      setFiles(newFiles);
+      setLoading(false);
+    };
+
+    loadData();
+  }, [user]);
+
   const saveSettingsToFirebase = async (newMapping?: any, newReclassified?: any) => {
     if (!user) return;
     try {
@@ -218,6 +278,50 @@ function AppContent() {
       }, { merge: true });
     } catch (error) {
       console.error("Erro ao salvar configurações:", error);
+    }
+  };
+
+  const saveImportedData = async (key: SchemaKey, data: any[]) => {
+    if (!user) return;
+    setSyncing(true);
+    setSyncProgress(0);
+    
+    const collectionName = COLLECTION_MAP[key];
+    const total = data.length;
+    const batchSize = 400; // Safe batch limit
+    
+    try {
+      for (let i = 0; i < data.length; i += batchSize) {
+        const batch = writeBatch(db);
+        const chunk = data.slice(i, i + batchSize);
+        
+        for (const row of chunk) {
+          const hash = await generateHash(row);
+          let docId = hash;
+          
+          // For registries, use CNPJ as ID to allow updates
+          if (key === 'CLIENTES_MASTTER' || key === 'ROTEIRO') {
+            const m = mapping[key];
+            const cnpj = normalizeCNPJ(row[m.cnpj]);
+            if (cnpj) docId = cnpj;
+          }
+          
+          const docRef = doc(db, 'users', user.uid, collectionName, docId);
+          batch.set(docRef, {
+            data: row,
+            importedAt: new Date(),
+            hash
+          }, { merge: true });
+        }
+        
+        await batch.commit();
+        setSyncProgress(Math.min(Math.round(((i + batchSize) / total) * 100), 100));
+      }
+    } catch (error) {
+      console.error(`Erro ao salvar dados de ${key}:`, error);
+    } finally {
+      setSyncing(false);
+      setSyncProgress(0);
     }
   };
 
@@ -261,14 +365,19 @@ function AppContent() {
     if (data.length > 0) {
       const columns = Object.keys(data[0]);
       const schema = SALES_SCHEMA[key];
-      const newMap: Record<string, string> = {};
+      const newMap: Record<string, string> = { ...mapping[key] };
       
       schema.forEach(field => {
         const match = findBestMatch(field.key, columns);
         if (match) newMap[field.key] = match;
       });
       
-      setMapping(prev => ({ ...prev, [key]: newMap }));
+      const newMapping = { ...mapping, [key]: newMap };
+      setMapping(newMapping);
+      saveSettingsToFirebase(newMapping);
+      
+      // Save data to Firestore
+      saveImportedData(key, data);
     }
   };
 
@@ -283,6 +392,34 @@ function AppContent() {
     saveSettingsToFirebase(newMapping);
     setCurrentMappingKey(null);
     setStep('upload');
+  };
+
+  const clearData = async (key: SchemaKey) => {
+    if (!user || !window.confirm(`Tem certeza que deseja apagar todos os dados de ${key} do banco de dados?`)) return;
+    
+    setLoading(true);
+    const collectionName = COLLECTION_MAP[key];
+    
+    try {
+      const q = query(collection(db, 'users', user.uid, collectionName));
+      const snapshot = await getDocs(q);
+      
+      const batchSize = 400;
+      const docs = snapshot.docs;
+      
+      for (let i = 0; i < docs.length; i += batchSize) {
+        const batch = writeBatch(db);
+        const chunk = docs.slice(i, i + batchSize);
+        chunk.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+      }
+      
+      setFiles(prev => ({ ...prev, [key]: null }));
+    } catch (error) {
+      console.error(`Erro ao limpar ${key}:`, error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchReceita = async (cnpj: string) => {
@@ -534,6 +671,27 @@ function AppContent() {
             <div>
               <h1 className="text-5xl font-bold tracking-tight mb-4">Consolidador de Vendas</h1>
               <p className="text-black/60 text-lg">Compare o desempenho entre Cabral e Mastter através de períodos similares.</p>
+              {loading && (
+                <div className="mt-4 flex items-center gap-2 text-emerald-600 font-bold animate-pulse">
+                  <div className="w-4 h-4 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                  Carregando dados salvos na nuvem...
+                </div>
+              )}
+              {syncing && (
+                <div className="mt-4 p-4 bg-white rounded-2xl border border-black/5 shadow-sm">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs font-bold uppercase tracking-widest text-black/40">Sincronizando com a nuvem...</span>
+                    <span className="text-xs font-bold text-emerald-600">{syncProgress}%</span>
+                  </div>
+                  <div className="h-2 bg-black/5 rounded-full overflow-hidden">
+                    <motion.div 
+                      className="h-full bg-emerald-500"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${syncProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
             
             <div className="flex items-center gap-4">
@@ -609,17 +767,27 @@ function AppContent() {
 
                   {files[key] && (
                     <div className="flex flex-col gap-2">
-                      <Button 
-                        variant={Object.keys(mapping[key]).length > 0 ? 'outline' : 'primary'}
-                        onClick={() => startMapping(key)}
-                        className="mt-2"
-                      >
-                        {Object.keys(mapping[key]).length > 0 ? 'Revisar Mapeamento' : 'Mapear Colunas'}
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant={Object.keys(mapping[key]).length > 0 ? 'outline' : 'primary'}
+                          onClick={() => startMapping(key)}
+                          className="flex-1"
+                        >
+                          {Object.keys(mapping[key]).length > 0 ? 'Revisar Mapeamento' : 'Mapear Colunas'}
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          onClick={() => clearData(key)}
+                          className="text-red-500 hover:bg-red-50 px-3"
+                          title="Limpar dados do banco"
+                        >
+                          Limpar
+                        </Button>
+                      </div>
                       {Object.keys(mapping[key]).length > 0 && (
                         <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 justify-center">
                           <CheckCircle2 className="w-3 h-3" />
-                          Mapeamento automático aplicado
+                          Dados sincronizados na nuvem
                         </p>
                       )}
                     </div>
@@ -698,12 +866,24 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-[#F5F5F4] text-[#141414] font-sans">
       {/* Sidebar/Filters */}
-      <div className="fixed top-0 left-0 h-full w-80 bg-white border-r border-black/5 p-8 hidden xl:flex flex-col gap-8 z-10">
-        <div>
-          <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-            <Filter className="w-5 h-5" />
-            Filtros
-          </h2>
+      <div className={cn(
+        "fixed top-0 left-0 h-full bg-white border-r border-black/5 p-8 hidden xl:flex flex-col gap-8 z-20 transition-all duration-300 ease-in-out",
+        showFilters ? "w-80 translate-x-0" : "w-0 -translate-x-full p-0 border-none"
+      )}>
+        <div className={cn("transition-opacity duration-200", showFilters ? "opacity-100" : "opacity-0 pointer-events-none")}>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold flex items-center gap-2">
+              <Filter className="w-5 h-5" />
+              Filtros
+            </h2>
+            <button 
+              onClick={() => setShowFilters(false)}
+              className="p-2 hover:bg-black/5 rounded-lg transition-colors"
+              title="Ocultar Filtros"
+            >
+              <PanelLeftClose className="w-5 h-5 text-black/40" />
+            </button>
+          </div>
           
           <div className="space-y-6">
             <div className="space-y-2">
@@ -810,15 +990,29 @@ function AppContent() {
       </div>
 
       {/* Main Content */}
-      <main className="xl:ml-80 p-6 md:p-12">
+      <main className={cn(
+        "p-6 md:p-12 transition-all duration-300 ease-in-out",
+        showFilters ? "xl:ml-80" : "xl:ml-0"
+      )}>
         <div className="max-w-7xl mx-auto">
           <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
-            <div>
-              <div className="flex items-center gap-2 text-emerald-600 font-bold text-sm uppercase tracking-widest mb-2">
-                <BarChart3 className="w-4 h-4" />
-                Análise de Desempenho
+            <div className="flex items-start gap-4">
+              {!showFilters && (
+                <button 
+                  onClick={() => setShowFilters(true)}
+                  className="p-3 bg-white border border-black/5 rounded-xl shadow-sm hover:bg-black/5 transition-all active:scale-95 hidden xl:flex"
+                  title="Exibir Filtros"
+                >
+                  <PanelLeftOpen className="w-6 h-6 text-black/60" />
+                </button>
+              )}
+              <div>
+                <div className="flex items-center gap-2 text-emerald-600 font-bold text-sm uppercase tracking-widest mb-2">
+                  <BarChart3 className="w-4 h-4" />
+                  Análise de Desempenho
+                </div>
+                <h1 className="text-4xl font-bold tracking-tight">Dashboard Consolidado</h1>
               </div>
-              <h1 className="text-4xl font-bold tracking-tight">Dashboard Consolidado</h1>
             </div>
             <div className="flex gap-3">
               {consolidatedData.some(c => c.canalReclassificado === 'OUTROS') && (

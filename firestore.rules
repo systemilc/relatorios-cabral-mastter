@@ -43,6 +43,13 @@ service cloud.firestore {
              data.updatedAt is timestamp;
     }
 
+    function isValidImport(data) {
+      return data.keys().hasAll(['data', 'importedAt', 'hash']) &&
+             data.data is map &&
+             data.importedAt is timestamp &&
+             data.hash is string;
+    }
+
     // Rules
     match /settings/{userId} {
       allow read, write: if isOwner(userId) && (request.method == 'GET' || isValidSettings(request.resource.data));
@@ -51,6 +58,12 @@ service cloud.firestore {
     match /receita_cache/{cnpj} {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated() && isValidCache(request.resource.data);
+    }
+
+    match /users/{userId}/{collection}/{recordId} {
+      allow read, write: if isOwner(userId) && 
+        (collection in ['cabral_sales', 'mastter_sales', 'clients_mastter', 'roteiro']) &&
+        (request.method == 'GET' || request.method == 'DELETE' || isValidImport(request.resource.data));
     }
 
     match /test/connection {
