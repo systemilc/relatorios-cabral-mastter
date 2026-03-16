@@ -1,0 +1,60 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: settings
+    // Document ID: userId
+    // Fields:
+    //   - mapping: map (required) - Column mappings
+    //   - reclassifiedChannels: map (required) - Manual channel reclassifications
+    //   - updatedAt: timestamp (required) - Last update time
+    //
+    // Collection: receita_cache
+    // Document ID: cnpj
+    // Fields:
+    //   - data: map (required) - Data from Receita API
+    //   - updatedAt: timestamp (required) - Last update time
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Domain Validators
+    function isValidSettings(data) {
+      return data.keys().hasAll(['mapping', 'reclassifiedChannels', 'updatedAt']) &&
+             data.mapping is map &&
+             data.reclassifiedChannels is map &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidCache(data) {
+      return data.keys().hasAll(['data', 'updatedAt']) &&
+             data.data is map &&
+             data.updatedAt is timestamp;
+    }
+
+    // Rules
+    match /settings/{userId} {
+      allow read, write: if isOwner(userId) && (request.method == 'GET' || isValidSettings(request.resource.data));
+    }
+
+    match /receita_cache/{cnpj} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isValidCache(request.resource.data);
+    }
+
+    match /test/connection {
+      allow read: if true;
+    }
+  }
+}
