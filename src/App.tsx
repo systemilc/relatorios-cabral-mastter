@@ -866,12 +866,27 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-[#F5F5F4] text-[#141414] font-sans">
       {/* Sidebar/Filters */}
+      <AnimatePresence>
+        {showFilters && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowFilters(false)}
+            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-20 xl:hidden"
+          />
+        )}
+      </AnimatePresence>
+
       <div className={cn(
-        "fixed top-0 left-0 h-full bg-white border-r border-black/5 p-8 hidden xl:flex flex-col gap-8 z-20 transition-all duration-300 ease-in-out",
-        showFilters ? "w-80 translate-x-0" : "w-0 -translate-x-full p-0 border-none"
+        "fixed top-0 left-0 h-full bg-white border-r border-black/5 flex flex-col z-30 transition-all duration-300 ease-in-out shadow-xl xl:shadow-none",
+        showFilters ? "w-80 translate-x-0" : "w-0 -translate-x-full border-none"
       )}>
-        <div className={cn("transition-opacity duration-200", showFilters ? "opacity-100" : "opacity-0 pointer-events-none")}>
-          <div className="flex items-center justify-between mb-6">
+        <div className={cn(
+          "flex flex-col h-full transition-opacity duration-200", 
+          showFilters ? "opacity-100 p-8" : "opacity-0 pointer-events-none p-0"
+        )}>
+          <div className="flex items-center justify-between mb-6 shrink-0">
             <h2 className="text-2xl font-bold flex items-center gap-2">
               <Filter className="w-5 h-5" />
               Filtros
@@ -885,7 +900,7 @@ function AppContent() {
             </button>
           </div>
           
-          <div className="space-y-6">
+          <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6 pb-8">
             <div className="space-y-2">
               <label className="text-xs font-bold uppercase tracking-widest text-black/40">Busca</label>
               <div className="relative">
@@ -980,12 +995,12 @@ function AppContent() {
               </select>
             </div>
           </div>
-        </div>
 
-        <div className="mt-auto">
-          <Button variant="outline" className="w-full" onClick={() => setStep('upload')}>
-            Voltar ao Início
-          </Button>
+          <div className="mt-auto pt-6 border-t border-black/5 shrink-0">
+            <Button variant="outline" className="w-full" onClick={() => setStep('upload')}>
+              Voltar ao Início
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -1000,7 +1015,7 @@ function AppContent() {
               {!showFilters && (
                 <button 
                   onClick={() => setShowFilters(true)}
-                  className="p-3 bg-white border border-black/5 rounded-xl shadow-sm hover:bg-black/5 transition-all active:scale-95 hidden xl:flex"
+                  className="p-3 bg-white border border-black/5 rounded-xl shadow-sm hover:bg-black/5 transition-all active:scale-95 flex"
                   title="Exibir Filtros"
                 >
                   <PanelLeftOpen className="w-6 h-6 text-black/60" />
@@ -1084,39 +1099,65 @@ function AppContent() {
 
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-            <Card className="p-6">
-              <p className="text-xs font-bold text-black/40 uppercase tracking-widest mb-1">Total Cabral</p>
-              <h3 className="text-2xl font-bold">
+            <Card className="p-6 border-l-4 border-l-black bg-white">
+              <div className="flex justify-between items-start mb-4">
+                <p className="text-xs font-bold text-black/40 uppercase tracking-widest">Total Cabral</p>
+                <div className="p-2 bg-black/5 rounded-lg">
+                  <BarChart3 className="w-4 h-4 text-black/40" />
+                </div>
+              </div>
+              <h3 className="text-3xl font-bold tracking-tight">
                 {stats.totalCabral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
               </h3>
-              <p className="text-[10px] text-black/40 mt-2">Média: {stats.avgCabral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-[10px] font-bold text-black/40 uppercase">Média:</span>
+                <span className="text-xs font-bold text-black/60">{stats.avgCabral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+              </div>
             </Card>
-            <Card className="p-6">
-              <p className="text-xs font-bold text-black/40 uppercase tracking-widest mb-1">Total Mastter</p>
-              <h3 className="text-2xl font-bold">
+
+            <Card className="p-6 border-l-4 border-l-emerald-500 bg-white shadow-emerald-500/5">
+              <div className="flex justify-between items-start mb-4">
+                <p className="text-xs font-bold text-black/40 uppercase tracking-widest">Total Mastter</p>
+                <div className="p-2 bg-emerald-50 rounded-lg">
+                  <TrendingUp className="w-4 h-4 text-emerald-600" />
+                </div>
+              </div>
+              <h3 className="text-3xl font-bold tracking-tight text-emerald-700">
                 {stats.totalMastter.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
               </h3>
               <div className={cn(
-                "flex items-center gap-1 text-xs font-bold mt-2",
-                stats.growth >= 0 ? "text-emerald-600" : "text-red-600"
+                "flex items-center gap-1 text-sm font-bold mt-2 px-2 py-0.5 rounded-full w-fit",
+                stats.growth >= 0 ? "text-emerald-700 bg-emerald-100" : "text-red-700 bg-red-100"
               )}>
                 {stats.growth >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                 {Math.abs(stats.growth).toFixed(1)}% vs Cabral
               </div>
             </Card>
-            <Card className="p-6">
-              <p className="text-xs font-bold text-black/40 uppercase tracking-widest mb-1">Ticket Médio (Cabral)</p>
-              <h3 className="text-2xl font-bold">
+
+            <Card className="p-6 border-l-4 border-l-indigo-500 bg-white">
+              <div className="flex justify-between items-start mb-4">
+                <p className="text-xs font-bold text-black/40 uppercase tracking-widest">Ticket Médio (C)</p>
+                <div className="p-2 bg-indigo-50 rounded-lg">
+                  <UserIcon className="w-4 h-4 text-indigo-600" />
+                </div>
+              </div>
+              <h3 className="text-3xl font-bold tracking-tight">
                 {stats.avgCabral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
               </h3>
-              <p className="text-xs text-black/40 mt-2">Por Cliente</p>
+              <p className="text-xs font-bold text-black/40 mt-2">Por Cliente</p>
             </Card>
-            <Card className="p-6">
-              <p className="text-xs font-bold text-black/40 uppercase tracking-widest mb-1">Ticket Médio (Mastter)</p>
-              <h3 className="text-2xl font-bold">
+
+            <Card className="p-6 border-l-4 border-l-violet-500 bg-white">
+              <div className="flex justify-between items-start mb-4">
+                <p className="text-xs font-bold text-black/40 uppercase tracking-widest">Ticket Médio (M)</p>
+                <div className="p-2 bg-violet-50 rounded-lg">
+                  <TrendingUp className="w-4 h-4 text-violet-600" />
+                </div>
+              </div>
+              <h3 className="text-3xl font-bold tracking-tight">
                 {stats.avgMastter.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
               </h3>
-              <p className="text-xs text-black/40 mt-2">Por Cliente</p>
+              <p className="text-xs font-bold text-black/40 mt-2">Por Cliente</p>
             </Card>
           </div>
 
@@ -1219,19 +1260,19 @@ function AppContent() {
                         
                         return (
                           <td key={idx} className="p-4 border-r border-black/5">
-                            <div className="flex flex-col items-center gap-1">
-                              <div className="flex justify-between w-full text-[11px]">
-                                <span className="text-black/40">C:</span>
-                                <span className="font-medium">{vC.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                            <div className="flex flex-col items-center gap-1.5">
+                              <div className="flex justify-between w-full text-[11px] items-center">
+                                <span className="text-[9px] font-bold text-black/30 bg-black/5 px-1 rounded">C</span>
+                                <span className="font-medium text-black/60">{vC.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
                               </div>
-                              <div className="flex justify-between w-full text-[11px]">
-                                <span className="text-black/40">M:</span>
-                                <span className="font-bold">{vM.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                              <div className="flex justify-between w-full text-[12px] items-center">
+                                <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1 rounded">M</span>
+                                <span className="font-bold text-emerald-700">{vM.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
                               </div>
                               {vC > 0 && (
                                 <div className={cn(
-                                  "text-[9px] font-bold px-1 rounded",
-                                  diff >= 0 ? "text-emerald-600 bg-emerald-50" : "text-red-600 bg-red-50"
+                                  "text-[10px] font-bold px-1.5 py-0.5 rounded-full w-full text-center",
+                                  diff >= 0 ? "text-emerald-700 bg-emerald-100" : "text-red-700 bg-red-100"
                                 )}>
                                   {diff >= 0 ? '+' : ''}{diff.toFixed(0)}%
                                 </div>
@@ -1240,17 +1281,17 @@ function AppContent() {
                           </td>
                         );
                       })}
-                      <td className="p-4 text-right bg-black/[0.01]">
-                        <div className="flex flex-col gap-2">
+                      <td className="p-4 text-right bg-black/[0.02]">
+                        <div className="flex flex-col gap-3">
                           <div>
                             <p className="text-[9px] font-bold text-black/40 uppercase">Cabral</p>
-                            <p className="text-xs font-medium">{client.totalCabral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                            <p className="text-sm font-medium text-black/60">{client.totalCabral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                             <p className="text-[9px] text-black/40 italic">Média: {client.mediaCabral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                           </div>
                           <div className="pt-2 border-t border-black/5">
-                            <p className="text-[9px] font-bold text-black/40 uppercase">Mastter</p>
-                            <p className="text-xs font-bold">{client.totalMastter.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                            <p className="text-[9px] text-black/40 italic">Média: {client.mediaMastter.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                            <p className="text-[9px] font-bold text-emerald-600 uppercase">Mastter</p>
+                            <p className="text-base font-bold text-emerald-700">{client.totalMastter.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                            <p className="text-[9px] text-emerald-600/60 italic">Média: {client.mediaMastter.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                           </div>
                         </div>
                       </td>
@@ -1294,9 +1335,9 @@ function AppContent() {
                       const fGrowth = fCabral > 0 ? ((fMastter - fCabral) / fCabral) * 100 : 0;
                       
                       return (
-                        <div key={f}>
+                        <div key={f} className="bg-white p-3 rounded-xl border border-black/5">
                           <p className="text-[10px] font-bold text-black/40 uppercase">{FAIXAS[f as keyof typeof FAIXAS].label}</p>
-                          <p className={cn("text-lg font-bold", fGrowth >= 0 ? "text-emerald-600" : "text-red-600")}>
+                          <p className={cn("text-xl font-bold tracking-tight", fGrowth >= 0 ? "text-emerald-600" : "text-red-600")}>
                             {fGrowth >= 0 ? '+' : ''}{fGrowth.toFixed(1)}%
                           </p>
                         </div>
@@ -1322,10 +1363,10 @@ function AppContent() {
                             <span className="text-[10px] text-black/40">{clientCount} Clientes</span>
                           </div>
                           <div className="text-right">
-                            <p className={cn("text-sm font-bold", cGrowth >= 0 ? "text-emerald-600" : "text-red-600")}>
+                            <p className={cn("text-base font-bold tracking-tight", cGrowth >= 0 ? "text-emerald-600" : "text-red-600")}>
                               {cGrowth >= 0 ? '+' : ''}{cGrowth.toFixed(1)}%
                             </p>
-                            <p className="text-[9px] text-black/40">
+                            <p className="text-[10px] font-bold text-black/40">
                               {cMastter.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}
                             </p>
                           </div>
