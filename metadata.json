@@ -1,0 +1,5 @@
+{
+  "name": "Sistema de Comparação de Desempenho - Cabral vs Mastter",
+  "description": "Sistema robusto para análise e comparação de desempenho de vendas entre distribuidoras, com normalização de CNPJ e integração com dados da Receita.",
+  "requestFramePermissions": []
+}

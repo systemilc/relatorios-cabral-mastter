@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "UserSettings": {
+      "title": "Configurações do Usuário",
+      "description": "Armazena mapeamentos de colunas e reclassificações de canais.",
+      "type": "object",
+      "properties": {
+        "mapping": {
+          "type": "object",
+          "description": "Mapeamento de colunas para cada tipo de arquivo."
+        },
+        "reclassifiedChannels": {
+          "type": "object",
+          "description": "Reclassificação manual de canais por CNPJ."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data da última atualização."
+        }
+      },
+      "required": ["mapping", "reclassifiedChannels", "updatedAt"]
+    },
+    "ReceitaCache": {
+      "title": "Cache da Receita Federal",
+      "description": "Armazena informações de CNPJs consultados.",
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "description": "Dados retornados pela API da Receita."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data da consulta."
+        }
+      },
+      "required": ["data", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/settings/{userId}": {
+      "schema": "UserSettings",
+      "description": "Configurações persistentes de cada usuário."
+    },
+    "/receita_cache/{cnpj}": {
+      "schema": "ReceitaCache",
+      "description": "Cache compartilhado de consultas à Receita Federal."
+    }
+  }
+}
